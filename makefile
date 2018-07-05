@@ -1,4 +1,4 @@
-make:
-  g++ main.cpp -o code -std=c++14 -O2
+code:
+	g++ main.cpp -o code -std=c++11 -O2
 clean:
-  rm -f code  
+	rm -f code
