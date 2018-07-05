@@ -5,6 +5,8 @@ using namespace std;
 
 int regi[35];
 char memory[4 * 1024 * 1024];
+int memPos;
+
 
 class Parser {
 public:
@@ -13,7 +15,7 @@ public:
 	map<string, int> op_sign;
 	map<string, int> reg_num;
 	vector<Token> operation;
-	int memPos, opCnt;
+	int opCnt;
 
 private:
 	inline string get_data_operation(const string &t, bool &isLabel, int &i){
@@ -261,7 +263,8 @@ private:
 
 
 public:
-	Parser(): memPos(0), opCnt(0){
+	Parser(): opCnt(0){
+		memPos = 0;
 		memset(memory, 0, sizeof(memory));
 		memset(regi, 0, sizeof(regi));
 		regi[29] = 4 * 1024 * 1024 - 1;
@@ -391,7 +394,6 @@ public:
 	~Parser() {
 		label_data.clear();
 		label_text.clear();
-		delete []memory;
 	}
 
 	void parse(istream &inFile) {
