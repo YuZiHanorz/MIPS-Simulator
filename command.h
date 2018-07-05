@@ -60,7 +60,7 @@ void exec_token(const Token &token, int &next_line, char *memory, int &memoryPos
 		case 8:
 			if (token.operand_kind[1] == operandKind::reg) {
 				long long ret = static_cast<long long>(regi[token.operand[0]]) * static_cast<long long>(regi[token.operand[1]]);
-				regi[32] = ret / (pow(2, 32));
+				regi[32] = ret / static_cast<long long>(pow(2, 32));
 				regi[33] = ret % static_cast<long long>(pow(2, 32));
 			}
 			else {
@@ -395,7 +395,6 @@ void exec_token(const Token &token, int &next_line, char *memory, int &memoryPos
 			break;
 		case 55:
 			if (regi[2] == 1) {
-				int a = regi[4];
 				cout << regi[4];
 			}
 			else if (regi[2] == 4) {
@@ -410,12 +409,15 @@ void exec_token(const Token &token, int &next_line, char *memory, int &memoryPos
 			}
 			else if (regi[2] == 8) {
 				string str;
+				int len = regi[5] + 1;
 				getline(cin, str);
-				regi[5] = str.length() + 1;
-				regi[4] = memoryPos;
-				for (int i = 0; i < str.length(); ++i, ++memoryPos) 
-					memory[memoryPos] = str[i];
-				memory[memoryPos++] = '\0';
+				if (str == "") 
+					getline(cin, str);
+				//regi[4] = memoryPos;
+				int st = regi[4];
+				for (int i = 0; i < str.length() && i < len; ++i, ++st) 
+					memory[st] = str[i];
+				memory[st++] = '\0';
 			}
 			else if (regi[2] == 9) {
 				regi[2] = memoryPos;
