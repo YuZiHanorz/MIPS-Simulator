@@ -2,13 +2,24 @@
 #include "command.h"
 
 
-int pc;
+int pc, cyc = 0, cnt = 0, wait = 0, jump = -1;
 Token if_id;
-int id_exec[5];   
-int exec_mem[5];
-int mem_wb[5]; 
+int id_exec[6];   
+int exec_mem[6];
+int mem_wb[6]; 
+bool if_success; //control hazard
+bool id_stall = false; //data hazard
+bool ed = false; //loop end
+int edcnt = 4;
+//ofstream out("ans1.txt");
+
+/*
+[5]:
+this line's pc;
+*/
 
 /*id_exec[0]:
+case -1: stall
 case 0: common			1: regi_num(write_address); 2: num1; 3:num2(if exist); 4:op;
 case 1:	mul_,div_		1: num1; 2: num2; 3: op; 
 case 2:	li,mov,mfh,mfl	1: regi_num; 2: num; 
@@ -22,6 +33,7 @@ case 9: syscall			1: num($v0); 2: num1($a0); 3: num2($a1 / memPos);
 */
 
 /*exec_mem[0]:
+case -1: stall
 case 0:					1: regi_num; 2: result;
 case 1:					1: result1($hi); 2: result2($lo)
 case 2:					1: regi_num; 2: num;
@@ -35,6 +47,7 @@ case 9:					1: num($v0); 2: num1($a0); 3: num2($a1 / memPos);
 */
 
 /*mem_wb[0]:
+case -1: stall
 case 0:					1: regi_num; 2: result;
 case 1:					1: result1($hi); 2: result2($lo)
 case 2:					1: regi_num; 2: num;
@@ -48,23 +61,63 @@ case 9:	syscall			1: num($v0); 2: num1($a0); 3: num2($a1); 4: type;
 */
 
 void Instruction_Fetch(const Parser &parser) {
-	pc = regi[34];
+	if (regi_lock[34]) {
+		if_success = false;
+		return;
+	}
+	if (id_stall) {
+		return;
+	}
+
+	if (jump >= 0) {
+		pc = jump;
+		jump = -1;
+	}
+	if (ed) {
+		if_success = false;
+		return;
+	}
+	if (pc >= parser.operation.size()) {
+		ed = true;
+		if_success = false;
+		return;
+	}
 	if_id = parser.operation[pc];
 	++pc;
+	if_success = true;
 }
 
 void Instruction_Decode() {
+	if (cyc == 1) 
+		return;
+	if (!if_success) {
+		id_exec[0] = -1;
+		return;
+	}
+	id_exec[5] = pc;
 	switch (if_id.op) {
 	case 8:
 	case 9:
 	case 12:
 	case 13:
 		id_exec[0] = 1;
+		if (regi_lock[if_id.operand[0]]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
+		}
 		id_exec[1] = regi[if_id.operand[0]];
-		if (if_id.operand_kind[1] == operandKind::reg)
+		if (if_id.operand_kind[1] == operandKind::reg) {
+			if (regi_lock[if_id.operand[1]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[if_id.operand[1]];
+		}
 		else id_exec[2] = if_id.operand[1];
 		id_exec[3] = if_id.op;
+		regi_lock[32] = regi_lock[33] = true;
 		break;
 	case 20:
 	case 44:
@@ -75,33 +128,74 @@ void Instruction_Decode() {
 		id_exec[1] = if_id.operand[0];
 		if (if_id.op == 20)
 			id_exec[2] = if_id.operand[1];
-		else if (if_id.op == 51)
+		else if (if_id.op == 51) {
+			if (regi_lock[if_id.operand[1]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[if_id.operand[1]];
-		else if (if_id.op == 52)
+		}
+		else if (if_id.op == 52) {
+			if (regi_lock[32]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[32];
-		else if (if_id.op == 53)
+		}
+		else if (if_id.op == 53) {
+			if (regi_lock[33]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[33];
+		}
 		else {
-			if (if_id.operand_kind[1] == reg)
+			if (if_id.operand_kind[1] == reg) {
+				if (regi_lock[if_id.operand[1]]) {
+					id_stall = true;
+					id_exec[0] = -1;
+					return;
+				}
 				id_exec[2] = regi[if_id.operand[1]];
+			}
 			else id_exec[2] = if_id.operand[1];
 		}
+		regi_lock[id_exec[1]] = true;
 		break;
 	case 27:
 	case 40:
 	case 41:
 		id_exec[0] = 3;
-		if (if_id.op == 41)
+		if (if_id.op == 41) {
+			if (regi_lock[if_id.operand[0]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[1] = regi[if_id.operand[0]];
+		}
 		else id_exec[1] = if_id.operand[0];
+		id_exec[5] = jump = id_exec[1];
 		break;
 	case 42:
 	case 43:
 		id_exec[0] = 4;
 		if (if_id.op == 42)
 			id_exec[1] = if_id.operand[0];
-		else id_exec[1] = regi[if_id.operand[0]];
+		else {
+			if (regi_lock[if_id.operand[0]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
+			id_exec[1] = regi[if_id.operand[0]];
+		}
 		id_exec[2] = pc;
+		id_exec[5] = jump = id_exec[1];
+		regi_lock[31] = true;
 		break;
 	case 28:
 	case 29:
@@ -110,12 +204,24 @@ void Instruction_Decode() {
 	case 32:
 	case 33:
 		id_exec[0] = 5;
+		if (regi_lock[if_id.operand[0]]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
+		}
 		id_exec[1] = if_id.operand[2];
 		id_exec[2] = regi[if_id.operand[0]];
-		if (if_id.operand_kind[1] == operandKind::reg)
+		if (if_id.operand_kind[1] == operandKind::reg) {
+			if (regi_lock[if_id.operand[1]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[3] = regi[if_id.operand[1]];
+		}
 		else id_exec[3] = if_id.operand[1];
 		id_exec[4] = if_id.op;
+		regi_lock[34] = true;
 		break;
 	case 34:
 	case 35:
@@ -125,9 +231,15 @@ void Instruction_Decode() {
 	case 39:
 		id_exec[0] = 5;
 		id_exec[1] = if_id.operand[1];
+		if (regi_lock[if_id.operand[0]]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
+		}
 		id_exec[2] = regi[if_id.operand[0]];
 		id_exec[3] = 0;
 		id_exec[4] = if_id.op;
+		regi_lock[34] = true;
 		break;
 	case 45:
 	case 46:
@@ -136,9 +248,19 @@ void Instruction_Decode() {
 		id_exec[1] = if_id.operand[0];
 		if (if_id.operand_kind[1] == operandKind::num) {
 			id_exec[2] = if_id.operand[1];
+			if (regi_lock[if_id.operand[2]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[3] = regi[if_id.operand[2]];
 		}
 		else if (if_id.operand_kind[1] == operandKind::reg) {
+			if (regi_lock[if_id.operand[1]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[if_id.operand[1]];
 			id_exec[3] = 0;
 		}
@@ -147,6 +269,7 @@ void Instruction_Decode() {
 			id_exec[3] = 0;
 		}
 		id_exec[4] = if_id.op;
+		regi_lock[id_exec[1]] = true;
 		break;
 	case 48:
 	case 49:
@@ -154,15 +277,30 @@ void Instruction_Decode() {
 		id_exec[0] = 7;
 		if (if_id.operand_kind[1] == operandKind::num) {
 			id_exec[1] = if_id.operand[1];
+			if (regi_lock[if_id.operand[2]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[2] = regi[if_id.operand[2]];
 		}
 		else if (if_id.operand_kind[1] == operandKind::reg) {
+			if (regi_lock[if_id.operand[1]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[1] = regi[if_id.operand[1]];
 			id_exec[2] = 0;
 		}
 		else {
 			id_exec[1] = if_id.operand[1];
 			id_exec[2] = 0;
+		}
+		if (regi_lock[if_id.operand[0]]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
 		}
 		id_exec[3] = static_cast<size_t>(regi[if_id.operand[0]]);
 		id_exec[4] = if_id.op;
@@ -172,25 +310,58 @@ void Instruction_Decode() {
 		break;
 	case 55:
 		id_exec[0] = 9;
+		if (regi_lock[2]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
+		}
 		id_exec[1] = regi[2];
+		if (regi[2] == 1 || regi[2] == 4 || regi[2] == 8 || regi[2] == 9) {
+			if (regi_lock[4]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
+		}
 		id_exec[2] = regi[4];
 		if (regi[2] == 9)
 			id_exec[3] = memPos;
-		else id_exec[3] = regi[5];
+		else {
+			if (regi_lock[5]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
+			id_exec[3] = regi[5];
+		}
+		regi_lock[2] = true;
 		break;
 	default:
 		id_exec[0] = 0;
 		id_exec[1] = if_id.operand[0];
+		if (regi_lock[if_id.operand[1]]) {
+			id_stall = true;
+			id_exec[0] = -1;
+			return;
+		}
 		id_exec[2] = regi[if_id.operand[1]];
-		if (if_id.operand_kind[2] == operandKind::reg)
+		if (if_id.operand_kind[2] == operandKind::reg) {
+			if (regi_lock[if_id.operand[2]]) {
+				id_stall = true;
+				id_exec[0] = -1;
+				return;
+			}
 			id_exec[3] = regi[if_id.operand[2]];
+		}
 		else id_exec[3] = if_id.operand[2];
 		id_exec[4] = if_id.op;
+		regi_lock[id_exec[1]] = true;
 	}
-	
+	id_stall = false;
 }
 
 void Execution(){
+	if (cyc <= 2) return;
 	int address;
 	long long ret1;
 	unsigned long long ret2;
@@ -200,7 +371,10 @@ void Execution(){
 	short as;
 	char *s;
 	exec_mem[0] = id_exec[0];
+	exec_mem[5] = id_exec[5];
 	switch (id_exec[0]) {
+	case -1:
+		return;
 	case 0:
 		exec_mem[1] = id_exec[1];
 		switch (id_exec[4]) {
@@ -304,6 +478,7 @@ void Execution(){
 		break;
 	case 5:
 		exec_mem[1] = id_exec[1];
+		regi_lock[34] = false;
 		switch (id_exec[4]) {
 		case 28:
 		case 34:
@@ -330,6 +505,8 @@ void Execution(){
 			exec_mem[2] = id_exec[2] < id_exec[3];
 			break;
 		}
+		if (exec_mem[2] == 1)
+			exec_mem[5] = jump = exec_mem[1];
 		break;
 	case 6:
 		exec_mem[1] = id_exec[1];
@@ -373,6 +550,7 @@ void Execution(){
 }
 
 void Memory_Access(){
+	if (cyc <= 3) return;
 	short *n1;
 	short as;
 	int *n2;
@@ -380,9 +558,11 @@ void Memory_Access(){
 	char *s;
 	string str;
 	int st, i;
-	for (int i = 0; i < 5; ++i)
+	for (int i = 0; i < 6; ++i)
 		mem_wb[i] = exec_mem[i];
 	switch (mem_wb[0]) {
+	case -1:
+		return;
 	case 6:
 		switch (exec_mem[3]) {
 		case 1:
@@ -461,49 +641,61 @@ void Memory_Access(){
 }
 
 void Write_Back(){
+	if (cyc <= 4) return;
 	switch (mem_wb[0]) {
+	case -1:
+		return;
 	case 0:
 		regi[mem_wb[1]] = mem_wb[2];
-		regi[34] = pc;
+		regi_lock[mem_wb[1]] = false;
+		regi[34] = mem_wb[5];
 		break;
 	case 1:
 		regi[32] = mem_wb[1];
 		regi[33] = mem_wb[2];
-		regi[34] = pc;
+		regi_lock[32] = regi_lock[33] = false;
+		regi[34] = mem_wb[5];
 		break;
 	case 2:
 		regi[mem_wb[1]] = mem_wb[2];
-		regi[34] = pc;
+		regi_lock[mem_wb[1]] = false;
+		regi[34] = mem_wb[5];
 		break;
 	case 3:
-		regi[34] = mem_wb[1];
+		regi[34] = mem_wb[5];
 		break;
 	case 4:
-		regi[34] = mem_wb[1];
-		regi[31] = pc;
+		regi[34] = mem_wb[5];
+		regi_lock[31] = false;
+		regi[31] = mem_wb[2];
 		break;
 	case 5:
-		if (mem_wb[2] == 1)
+		/*if (mem_wb[2] == 1)
 			regi[34] = mem_wb[1];
-		else regi[34] = pc;
+		else regi[34] = pc;*/
+		regi[34] = mem_wb[5];
 		break;
 	case 6:
-		regi[34] = pc;
+		regi[34] = mem_wb[5];
 		memset(&regi[mem_wb[1]], 0, 1);
 		regi[mem_wb[1]] = mem_wb[2];
+		regi_lock[mem_wb[1]] = false;
 		break;
 	case 7:
-		regi[34] = pc;
+		regi[34] = mem_wb[5];
 		break;
 	case 8:
-		regi[34] = pc;
+		regi[34] = mem_wb[5];
 		break;
 	case 9:
-		regi[34] = pc;
+		regi[34] = mem_wb[5];
 		if (mem_wb[3] == 5 || mem_wb[3] == 9)
 			regi[2] = mem_wb[1];
-		
+		regi_lock[2] = false;
 		break;
 	}
-
+	
+	/*for (int i = 0; i < 35; ++i)
+		cout << i << ':' << regi[i] << ' ';
+	cout << '\n';*/
 }
