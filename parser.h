@@ -88,8 +88,7 @@ private:
 					ret.push_back('\?');
 				else if (t[i] == '0')
 					ret.push_back('\0');
-				else if (t[i] == 'd' && t[i + 1] == 'd' && t[i + 2] == 'd')
-					ret.push_back('\ddd');
+				
 			}
 			else
 				ret.push_back(t[i]);
