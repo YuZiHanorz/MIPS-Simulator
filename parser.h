@@ -4,6 +4,7 @@
 using namespace std;
 
 int regi[35];
+bool regi_lock[35];
 char memory[4 * 1024 * 1024];
 int memPos;
 
@@ -87,7 +88,8 @@ private:
 					ret.push_back('\?');
 				else if (t[i] == '0')
 					ret.push_back('\0');
-				
+				else if (t[i] == 'd' && t[i + 1] == 'd' && t[i + 2] == 'd')
+					ret.push_back('\ddd');
 			}
 			else
 				ret.push_back(t[i]);
@@ -130,8 +132,7 @@ private:
 					ret += '\?';
 				else if (t[i] == '0')
 					ret += '\0';
-				else if (t[i] == 'd' && t[i + 1] == 'd' && t[i + 2] == 'd')
-					ret += '\ddd';
+				
 			}
 			else
 				ret += t[i];
@@ -266,6 +267,7 @@ public:
 		memPos = 0;
 		memset(memory, 0, sizeof(memory));
 		memset(regi, 0, sizeof(regi));
+		memset(regi_lock, false, sizeof(regi_lock));
 		regi[29] = 4 * 1024 * 1024 - 1;
 
 		op_sign["add"] = 1;
