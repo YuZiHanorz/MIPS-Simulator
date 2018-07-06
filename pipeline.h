@@ -9,6 +9,7 @@ int exec_mem[6];
 int mem_wb[6]; 
 bool if_success; //control hazard
 bool id_stall = false; //data hazard
+bool mem_stall = false; //structure hazard
 bool ed = false; //loop end
 int edcnt = 4;
 //ofstream out("ans1.txt");
@@ -68,7 +69,13 @@ void Instruction_Fetch(const Parser &parser) {
 	if (id_stall) {
 		return;
 	}
-
+	
+	if (mem_stall) {
+		if_success = false;
+		mem_stall = false;
+		return;
+	}
+	
 	if (jump >= 0) {
 		pc = jump;
 		jump = -1;
@@ -564,6 +571,7 @@ void Memory_Access(){
 	case -1:
 		return;
 	case 6:
+		mem_stall = true;
 		switch (exec_mem[3]) {
 		case 1:
 			memset(&mem_wb[2], 0, 1);
@@ -581,6 +589,7 @@ void Memory_Access(){
 		}
 		break;
 	case 7:
+		mem_stall = true;
 		switch (exec_mem[2]) {
 		case 1:
 			n3 = static_cast<size_t>(exec_mem[3]);
@@ -602,6 +611,7 @@ void Memory_Access(){
 		}
 		break;
 	case 9:
+		mem_stall = true;
 		switch (exec_mem[1]) {
 		case 1:
 			cout << exec_mem[2];
