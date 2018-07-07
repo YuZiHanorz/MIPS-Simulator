@@ -4,19 +4,22 @@
 
 int pc, cyc = 0, cnt = 0, wait = 0, jump = -1;
 Token if_id;
-int id_exec[6];   
-int exec_mem[6];
-int mem_wb[6]; 
+int id_exec[7];   
+int exec_mem[7];
+int mem_wb[7]; 
+int line_num;
 bool if_success; //control hazard
 bool id_stall = false; //data hazard
 bool mem_stall = false; //structure hazard
 bool ed = false; //loop end
 int edcnt = 4;
-//ofstream out("ans1.txt");
-
+map<int, int> predict_value;
+ofstream out("ans1.txt");
 /*
 [5]:
 this line's pc;
+[6]:
+offset
 */
 
 /*id_exec[0]:
@@ -62,20 +65,21 @@ case 9:	syscall			1: num($v0); 2: num1($a0); 3: num2($a1); 4: type;
 */
 
 void Instruction_Fetch(const Parser &parser) {
-	if (regi_lock[34]) {
+	/*if (regi_lock[34]) {
 		if_success = false;
 		return;
-	}
+	}*/
+
 	if (id_stall) {
 		return;
 	}
-	
+
 	if (mem_stall) {
 		if_success = false;
 		mem_stall = false;
 		return;
 	}
-	
+
 	if (jump >= 0) {
 		pc = jump;
 		jump = -1;
@@ -89,6 +93,7 @@ void Instruction_Fetch(const Parser &parser) {
 		if_success = false;
 		return;
 	}
+	line_num = pc;
 	if_id = parser.operation[pc];
 	++pc;
 	if_success = true;
@@ -101,7 +106,9 @@ void Instruction_Decode() {
 		id_exec[0] = -1;
 		return;
 	}
+	
 	id_exec[5] = pc;
+	id_exec[6] = line_num;
 	switch (if_id.op) {
 	case 8:
 	case 9:
@@ -228,7 +235,9 @@ void Instruction_Decode() {
 		}
 		else id_exec[3] = if_id.operand[1];
 		id_exec[4] = if_id.op;
-		regi_lock[34] = true;
+		//regi_lock[34] = true;
+		if (predict_value[line_num] > 1) 
+			id_exec[5] = jump = id_exec[1];
 		break;
 	case 34:
 	case 35:
@@ -246,7 +255,9 @@ void Instruction_Decode() {
 		id_exec[2] = regi[if_id.operand[0]];
 		id_exec[3] = 0;
 		id_exec[4] = if_id.op;
-		regi_lock[34] = true;
+		//regi_lock[34] = true;
+		if (predict_value[line_num] > 1) 
+			id_exec[5] = jump = id_exec[1];
 		break;
 	case 45:
 	case 46:
@@ -379,6 +390,7 @@ void Execution(){
 	char *s;
 	exec_mem[0] = id_exec[0];
 	exec_mem[5] = id_exec[5];
+	exec_mem[6] = id_exec[6];
 	switch (id_exec[0]) {
 	case -1:
 		return;
@@ -485,7 +497,7 @@ void Execution(){
 		break;
 	case 5:
 		exec_mem[1] = id_exec[1];
-		regi_lock[34] = false;
+		//regi_lock[34] = false;
 		switch (id_exec[4]) {
 		case 28:
 		case 34:
@@ -512,8 +524,25 @@ void Execution(){
 			exec_mem[2] = id_exec[2] < id_exec[3];
 			break;
 		}
-		if (exec_mem[2] == 1)
-			exec_mem[5] = jump = exec_mem[1];
+		if (exec_mem[2] == 1) {
+			if (predict_value[id_exec[6]] <= 1) {
+				if_success = false;
+				jump = exec_mem[1];
+			}
+			if (predict_value[id_exec[6]] < 3)
+				++predict_value[id_exec[6]];
+			
+			exec_mem[5] = exec_mem[1];
+		}
+		else {
+			if (predict_value[id_exec[6]] > 1) {
+				if_success = false;
+				jump = id_exec[6] + 1;
+			}
+			if (predict_value[id_exec[6]] > 0)
+				--predict_value[id_exec[6]];
+			exec_mem[5] = exec_mem[6] + 1;
+		}
 		break;
 	case 6:
 		exec_mem[1] = id_exec[1];
@@ -565,7 +594,7 @@ void Memory_Access(){
 	char *s;
 	string str;
 	int st, i;
-	for (int i = 0; i < 6; ++i)
+	for (int i = 0; i < 7; ++i)
 		mem_wb[i] = exec_mem[i];
 	switch (mem_wb[0]) {
 	case -1:
@@ -705,7 +734,7 @@ void Write_Back(){
 		break;
 	}
 	
-	/*for (int i = 0; i < 35; ++i)
-		cout << i << ':' << regi[i] << ' ';
-	cout << '\n';*/
+	for (int i = 0; i < 35; ++i)
+		out << i << ':' << regi[i] << ' ';
+	out << '\n';
 }
