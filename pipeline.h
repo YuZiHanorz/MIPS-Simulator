@@ -14,7 +14,7 @@ bool mem_stall = false; //structure hazard
 bool ed = false; //loop end
 int edcnt = 4;
 map<int, int> predict_value;
-ofstream out("ans1.txt");
+//ofstream out("ans1.txt");
 /*
 [5]:
 this line's pc;
@@ -734,7 +734,7 @@ void Write_Back(){
 		break;
 	}
 	
-	for (int i = 0; i < 35; ++i)
+	/*for (int i = 0; i < 35; ++i)
 		out << i << ':' << regi[i] << ' ';
-	out << '\n';
+	out << '\n';*/
 }
